@@ -15,45 +15,34 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $error = '';
+$success = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $student_id = trim($_POST['student_id']);
+    $name = trim($_POST['name']);
+    $email = trim($_POST['email']);
     $password = trim($_POST['password']);
+    $confirm_password = trim($_POST['confirm_password']);
+    $phone = trim($_POST['phone']);
+    $route_id = isset($_POST['route_id']) ? (int)$_POST['route_id'] : null;
     
-    if (empty($student_id) || empty($password)) {
-        $error = 'Please fill in all fields.';
+    if (empty($student_id) || empty($name) || empty($email) || empty($password)) {
+        $error = 'Please fill in all required fields.';
+    } elseif ($password !== $confirm_password) {
+        $error = 'Passwords do not match.';
     } else {
-        try {
-            $database = new Database();
-            $db = $database->getConnection();
-            
-            $auth = new Auth($db);
-            
-            // Check if loginUser method exists
-            if (!method_exists($auth, 'loginUser')) {
-                throw new Exception('Authentication system error. Please try again later.');
-            }
-            
-            $user = $auth->loginUser($student_id, $password);
-            
-            if ($user && is_array($user)) {
-                // Store user data in session
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['student_id'] = $user['student_id'];
-                $_SESSION['name'] = $user['name'];
-                $_SESSION['email'] = $user['email'];
-                $_SESSION['route_id'] = $user['route_id'];
-                
-                header('Location: ' . BASE_URL . 'user/index.php');
-                exit;
-            } else {
-                $error = 'Invalid credentials.';
-            }
-            
-        } catch (Exception $e) {
-            $error = 'Login failed: ' . $e->getMessage();
-        } catch (PDOException $e) {
-            $error = 'Database connection error. Please try again later.';
+        $database = new Database();
+        $db = $database->getConnection();
+        
+        $auth = new Auth($db);
+        $user_id = $auth->registerUser($student_id, $name, $email, $password, $phone, $route_id);
+        
+        if ($user_id) {
+            $success = 'Registration successful! You can now login.';
+            // Clear form
+            $_POST = array();
+        } else {
+            $error = 'Registration failed. Student ID or email may already exist.';
         }
     }
 }
@@ -63,14 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Login - <?php echo APP_NAME; ?></title>
+    <title>Student Registration - <?php echo APP_NAME; ?></title>
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/vendor/fontawesome/css/all.min.css">
     <style>
         /* Base Styles */
         :root {
-            --primary: #4f46e5;
-            --primary-dark: #4338ca;
-            --primary-light: #c7d2fe;
+            --primary: #7c3aed;
+            --primary-dark: #6d28d9;
+            --primary-light: #ddd6fe;
             --secondary: #4b5563;
             --accent: #f59e0b;
             --light: #f9fafb;
@@ -78,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             --success: #10b981;
             --danger: #ef4444;
             --card-bg: #ffffff;
-            --gradient-start: #4f46e5;
-            --gradient-end: #7c3aed;
+            --gradient-start: #7c3aed;
+            --gradient-end: #8b5cf6;
             --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             --radius: 12px;
             --input-border: #d1d5db;
@@ -93,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         
         body {
-            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
             color: var(--dark);
             line-height: 1.6;
             min-height: 100vh;
@@ -169,7 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             box-shadow: var(--shadow);
             padding: 40px;
             width: 100%;
-            max-width: 440px;
+            max-width: 500px;
+            border-top: 4px solid var(--primary);
         }
         
         .form-container h2 {
@@ -178,6 +168,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: var(--primary-dark);
             font-size: 1.8rem;
             font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
         
         /* Alert Styles */
@@ -186,12 +180,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-radius: 8px;
             margin-bottom: 20px;
             font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
         .alert-error {
             background-color: #fee2e2;
             color: #b91c1c;
             border: 1px solid #fecaca;
+        }
+        
+        .alert-success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
         }
         
         /* Form Elements */
@@ -205,6 +208,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             margin-bottom: 8px;
             color: var(--secondary);
             font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
         .form-group input {
@@ -219,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .form-group input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
         }
         
         .btn {
@@ -234,11 +240,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             cursor: pointer;
             transition: all 0.3s ease;
             margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
         }
         
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 12px -2px rgba(79, 70, 229, 0.4);
+            box-shadow: 0 6px 12px -2px rgba(124, 58, 237, 0.4);
         }
         
         .form-container p {
@@ -316,10 +326,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             text-decoration: underline;
         }
         
-        /* Loading state */
-        .btn-loading {
-            opacity: 0.7;
-            pointer-events: none;
+        /* Student Specific Styling */
+        .student-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(124, 58, 237, 0.1);
+            color: var(--primary);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 10px;
         }
         
         /* Responsive Design */
@@ -356,6 +374,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             .form-container {
                 padding: 25px 15px;
             }
+            
+            .form-container h2 {
+                font-size: 1.5rem;
+            }
+        }
+        
+        /* Password strength indicator */
+        .password-strength {
+            height: 5px;
+            margin-top: 8px;
+            border-radius: 5px;
+            background: #e5e7eb;
+            overflow: hidden;
+        }
+        
+        .password-strength-meter {
+            height: 100%;
+            width: 0;
+            transition: width 0.3s ease, background 0.3s ease;
+        }
+        
+        .password-hint {
+            font-size: 0.8rem;
+            color: var(--secondary);
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -369,8 +412,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <nav>
                 <ul>
                     <li><a href="<?php echo BASE_URL; ?>index.php">Home</a></li>
-                    <li><a href="<?php echo BASE_URL; ?>user/register.php">Register</a></li>
-                    <li><a href="<?php echo BASE_URL; ?>admin/login.php">Admin</a></li>
+                    <li><a href="<?php echo BASE_URL; ?>user/login.php">Student Login</a></li>
+                    <li><a href="<?php echo BASE_URL; ?>admin/login.php">Admin Login</a></li>
                 </ul>
             </nav>
         </div>
@@ -378,38 +421,79 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     <div class="container">
         <div class="form-container">
-            <h2>Student Login</h2>
+            <h2>
+                <i class="fas fa-user-graduate"></i>
+                Student Registration
+                <span class="student-badge">New Account</span>
+            </h2>
             
             <?php if (!empty($error)): ?>
                 <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i> 
-                    <?php echo htmlspecialchars($error); ?>
+                    <i class="fas fa-exclamation-circle"></i>
+                    <?php echo $error; ?>
                 </div>
             <?php endif; ?>
             
-            <form method="POST" action="" id="loginForm">
+            <?php if (!empty($success)): ?>
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    <?php echo $success; ?>
+                </div>
+            <?php endif; ?>
+            
+            <form method="POST" action="">
                 <div class="form-group">
-                    <label for="student_id">Student ID</label>
-                    <input type="text" id="student_id" name="student_id" required 
-                           placeholder="Enter your student ID" 
-                           value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id']) : ''; ?>">
+                    <label for="student_id">
+                        <i class="fas fa-id-card"></i> Student ID
+                    </label>
+                    <input type="text" id="student_id" name="student_id" value="<?php echo isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id']) : ''; ?>" required placeholder="Enter your student ID">
                 </div>
                 
                 <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required 
-                           placeholder="Enter your password">
+                    <label for="name">
+                        <i class="fas fa-user"></i> Full Name
+                    </label>
+                    <input type="text" id="name" name="name" value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>" required placeholder="Enter your full name">
                 </div>
                 
-                <button type="submit" class="btn" id="loginBtn">
-                    <span id="btnText">Login</span>
-                    <span id="btnLoading" style="display: none;">
-                        <i class="fas fa-spinner fa-spin"></i> Logging in...
-                    </span>
+                <div class="form-group">
+                    <label for="email">
+                        <i class="fas fa-envelope"></i> Email Address
+                    </label>
+                    <input type="email" id="email" name="email" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" required placeholder="Enter your email address">
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone">
+                        <i class="fas fa-phone"></i> Phone Number
+                    </label>
+                    <input type="tel" id="phone" name="phone" value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>" placeholder="Enter your phone number">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">
+                        <i class="fas fa-lock"></i> Password
+                    </label>
+                    <input type="password" id="password" name="password" required placeholder="Create a secure password">
+                    <div class="password-strength">
+                        <div class="password-strength-meter" id="password-strength-meter"></div>
+                    </div>
+                    <div class="password-hint">Use at least 8 characters with a mix of letters, numbers & symbols</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirm_password">
+                        <i class="fas fa-lock"></i> Confirm Password
+                    </label>
+                    <input type="password" id="confirm_password" name="confirm_password" required placeholder="Confirm your password">
+                </div>
+                
+                <button type="submit" class="btn">
+                    <i class="fas fa-user-plus"></i> Register
                 </button>
             </form>
             
-            <p>Don't have an account? <a href="<?php echo BASE_URL; ?>user/register.php">Register here</a></p>
+            <p>Already have an account? <a href="<?php echo BASE_URL; ?>user/login.php">Login here</a></p>
             
             <div class="admin-access">
                 <a href="<?php echo BASE_URL; ?>admin/login.php" class="admin-btn">
@@ -434,16 +518,52 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </footer>
 
     <script>
-        // Add loading state to form submission
-        document.getElementById('loginForm').addEventListener('submit', function() {
-            const btn = document.getElementById('loginBtn');
-            const btnText = document.getElementById('btnText');
-            const btnLoading = document.getElementById('btnLoading');
+        // Password strength indicator
+        const passwordInput = document.getElementById('password');
+        const strengthMeter = document.getElementById('password-strength-meter');
+        
+        passwordInput.addEventListener('input', function() {
+            const val = passwordInput.value;
+            const result = zxcvbn(val);
             
-            btn.classList.add('btn-loading');
-            btnText.style.display = 'none';
-            btnLoading.style.display = 'inline';
+            // Update the strength meter
+            switch(result.score) {
+                case 0:
+                    strengthMeter.style.width = '0%';
+                    strengthMeter.style.background = '#ef4444';
+                    break;
+                case 1:
+                    strengthMeter.style.width = '25%';
+                    strengthMeter.style.background = '#ef4444';
+                    break;
+                case 2:
+                    strengthMeter.style.width = '50%';
+                    strengthMeter.style.background = '#f59e0b';
+                    break;
+                case 3:
+                    strengthMeter.style.width = '75%';
+                    strengthMeter.style.background = '#84cc16';
+                    break;
+                case 4:
+                    strengthMeter.style.width = '100%';
+                    strengthMeter.style.background = '#10b981';
+                    break;
+            }
         });
+        
+        // Simple zxcvbn implementation for demo purposes
+        function zxcvbn(password) {
+            let score = 0;
+            if (password.length > 6) score++;
+            if (password.length > 10) score++;
+            if (/[A-Z]/.test(password)) score++;
+            if (/[0-9]/.test(password)) score++;
+            if (/[^A-Za-z0-9]/.test(password)) score++;
+            
+            return {
+                score: Math.min(4, Math.floor(score))
+            };
+        }
     </script>
 </body>
 </html>

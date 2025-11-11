@@ -12,37 +12,30 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Get user information
+// Get all routes
 $database = new Database();
 $db = $database->getConnection();
 
+$query = "SELECT * FROM routes ORDER BY name";
+$stmt = $db->prepare($query);
+$stmt->execute();
+$routes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get user's current route
 $user_id = $_SESSION['user_id'];
 $query = "SELECT route_id FROM users WHERE id = :user_id";
 $stmt = $db->prepare($query);
 $stmt->bindParam(':user_id', $user_id);
 $stmt->execute();
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
-$route_id = $user['route_id'];
-
-// Get notifications
-$query = "SELECT * FROM notifications 
-          WHERE (target_audience = 'all' 
-                 OR (target_audience = 'specific_route' AND target_id = :route_id)
-                 OR (target_audience = 'specific_user' AND target_id = :user_id))
-          ORDER BY created_at DESC";
-$stmt = $db->prepare($query);
-$stmt->bindParam(':route_id', $route_id);
-$stmt->bindParam(':user_id', $user_id);
-$stmt->execute();
-$notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$user_route_id = $user['route_id'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notifications - <?php echo APP_NAME; ?></title>
-    <link rel="stylesheet" href="<?php echo BASE_URL; ?>css/style.css">
+    <title>Bus Routes - <?php echo APP_NAME; ?></title>
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/vendor/fontawesome/css/all.min.css">
     <style>
         /* Base Styles */
@@ -154,107 +147,87 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
             font-size: 2rem;
         }
         
-        /* Notifications List */
-        .notifications-list {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            margin-top: 20px;
+        /* Alert styles */
+        .alert {
+            padding: 15px 20px;
+            margin-bottom: 30px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
         }
         
-        /* Notification Item */
-        .notification-item {
+        .alert-info {
+            background-color: #dbeafe;
+            color: #1e40af;
+            border-left: 4px solid var(--primary);
+        }
+        
+        /* Routes grid */
+        .routes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+        
+        /* Route card styles */
+        .route-card {
             background: var(--card-bg);
             border-radius: var(--radius);
             padding: 25px;
             box-shadow: var(--shadow);
             position: relative;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
-            border-left: 5px solid var(--primary);
+            border-top: 5px solid var(--primary);
         }
         
-        .notification-item:hover {
-            transform: translateY(-3px);
+        .route-card:hover {
+            transform: translateY(-5px);
             box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
         
-        /* Different border colors based on audience type */
-        .notification-item[data-audience="all"] {
-            border-left-color: #3498db;
+        .route-card.current-route {
+            border-top: 5px solid var(--success);
+            background: linear-gradient(to bottom right, #f0fdf4, #fff);
         }
         
-        .notification-item[data-audience="specific_route"] {
-            border-left-color: #2ecc71;
-        }
-        
-        .notification-item[data-audience="specific_user"] {
-            border-left-color: #9b59b6;
-        }
-        
-        .notification-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 15px;
-        }
-        
-        .notification-header h3 {
+        .route-card h3 {
             color: var(--primary-dark);
-            font-size: 1.25rem;
-            margin: 0;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
             gap: 10px;
+            font-size: 1.3rem;
         }
         
-        .notification-header h3 i {
+        .route-card h3 i {
             color: var(--primary);
         }
         
-        .notification-time {
+        .route-card > p {
             color: var(--secondary);
-            font-size: 0.9rem;
-            white-space: nowrap;
-            margin-left: 15px;
+            margin-bottom: 20px;
+            line-height: 1.5;
         }
         
-        .notification-item p {
+        .route-details {
+            margin-top: 15px;
+        }
+        
+        .route-details p {
+            margin: 12px 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .route-details strong {
             color: var(--dark);
-            margin-bottom: 15px;
-            line-height: 1.6;
-            font-size: 1.05rem;
+            min-width: 100px;
         }
         
-        .notification-audience {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            background: #ecf0f1;
-            border-radius: 20px;
-            color: var(--secondary);
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-        
-        /* Alert styles */
-        .alert {
-            padding: 25px;
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            text-align: center;
-            background: var(--card-bg);
-        }
-        
-        .alert-info {
-            background-color: #dbeafe;
-            color: #1e40af;
-            border-left: 5px solid var(--primary);
-        }
-        
-        .alert p {
-            font-size: 1.1rem;
-            margin: 0;
+        .route-details i {
+            color: var(--primary);
+            width: 20px;
         }
         
         /* Badge styles */
@@ -262,24 +235,13 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
             position: absolute;
             top: 20px;
             right: 20px;
+            background: var(--success);
             color: white;
             padding: 6px 14px;
             border-radius: 20px;
             font-size: 0.8rem;
             font-weight: 600;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        
-        .badge-all {
-            background: #3498db;
-        }
-        
-        .badge-route {
-            background: #2ecc71;
-        }
-        
-        .badge-user {
-            background: #9b59b6;
         }
         
         /* Footer Styles */
@@ -331,18 +293,12 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 gap: 15px;
             }
             
+            .routes-grid {
+                grid-template-columns: 1fr;
+            }
+            
             .container {
                 padding: 20px 15px;
-            }
-            
-            .notification-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            
-            .notification-time {
-                margin-left: 0;
-                margin-top: 5px;
             }
         }
         
@@ -360,7 +316,7 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 font-size: 1.5rem;
             }
             
-            .notification-item {
+            .route-card {
                 padding: 20px;
             }
         }
@@ -368,19 +324,19 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
         /* Empty State */
         .empty-state {
             text-align: center;
-            padding: 60px 20px;
+            padding: 40px 20px;
             color: var(--secondary);
+            grid-column: 1 / -1;
         }
         
         .empty-state i {
-            font-size: 4rem;
-            margin-bottom: 20px;
+            font-size: 3rem;
+            margin-bottom: 15px;
             color: var(--primary-light);
         }
         
         .empty-state p {
-            font-size: 1.2rem;
-            margin-bottom: 30px;
+            font-size: 1.1rem;
         }
     </style>
 </head>
@@ -395,7 +351,6 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <ul>
                     <li><a href="<?php echo BASE_URL; ?>index.php">Home</a></li>
                     <li><a href="<?php echo BASE_URL; ?>user/dashboard.php">Dashboard</a></li>
-                    <li><a href="<?php echo BASE_URL; ?>user/bus-routes.php">Routes</a></li>
                     <li><a href="<?php echo BASE_URL; ?>user/profile.php">Profile</a></li>
                     <li><a href="<?php echo BASE_URL; ?>user/logout.php">Logout</a></li>
                 </ul>
@@ -405,59 +360,63 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     <div class="container">
         <h2 class="page-title">
-            <i class="fas fa-bell"></i>
-            Notifications
+            <i class="fas fa-route"></i>
+            Bus Routes
         </h2>
         
-        <?php if (count($notifications) > 0): ?>
-            <div class="notifications-list">
-                <?php foreach ($notifications as $notification): ?>
-                    <div class="notification-item" data-audience="<?php echo $notification['target_audience']; ?>">
-                        <div class="notification-header">
-                            <h3><i class="fas fa-bullhorn"></i> <?php echo htmlspecialchars($notification['title']); ?></h3>
-                            <span class="notification-time">
-                                <i class="far fa-clock"></i> <?php echo date('M j, g:i a', strtotime($notification['created_at'])); ?>
-                            </span>
-                        </div>
-                        <p><?php echo htmlspecialchars($notification['message']); ?></p>
-                        <small class="notification-audience">
-                            <?php
-                            $badge_class = '';
-                            switch ($notification['target_audience']) {
-                                case 'all':
-                                    echo '<i class="fas fa-globe"></i> For everyone';
-                                    $badge_class = 'badge-all';
-                                    break;
-                                case 'specific_route':
-                                    echo '<i class="fas fa-route"></i> For your route';
-                                    $badge_class = 'badge-route';
-                                    break;
-                                case 'specific_user':
-                                    echo '<i class="fas fa-user"></i> Personal notification';
-                                    $badge_class = 'badge-user';
-                                    break;
-                            }
-                            ?>
-                        </small>
-                        <div class="badge <?php echo $badge_class; ?>">
-                            <?php 
-                            if ($notification['target_audience'] == 'all') echo 'Public';
-                            else if ($notification['target_audience'] == 'specific_route') echo 'Route';
-                            else echo 'Personal';
-                            ?>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php else: ?>
-            <div class="empty-state">
-                <i class="far fa-bell-slash"></i>
-                <p>No notifications available at the moment.</p>
-                <div class="alert alert-info">
-                    <p>You'll see important updates here when they become available.</p>
-                </div>
+        <?php if ($user_route_id): ?>
+            <div class="alert alert-info">
+                <strong>Your Assigned Route:</strong> 
+                <?php
+                $user_route = array_filter($routes, function($route) use ($user_route_id) {
+                    return $route['id'] == $user_route_id;
+                });
+                if (!empty($user_route)) {
+                    $user_route = reset($user_route);
+                    echo htmlspecialchars($user_route['name']) . ' - ' . htmlspecialchars($user_route['description']);
+                }
+                ?>
             </div>
         <?php endif; ?>
+        
+        <div class="routes-grid">
+            <?php if (count($routes) > 0): ?>
+                <?php foreach ($routes as $route): ?>
+                    <div class="route-card <?php echo $route['id'] == $user_route_id ? 'current-route' : ''; ?>">
+                        <h3><i class="fas fa-bus"></i> <?php echo htmlspecialchars($route['name']); ?></h3>
+                        <p><?php echo htmlspecialchars($route['description']); ?></p>
+                        
+                        <div class="route-details">
+                            <p>
+                                <i class="fas fa-map-marker-alt"></i>
+                                <strong>Start Point:</strong> <?php echo htmlspecialchars($route['start_point']); ?>
+                            </p>
+                            <p>
+                                <i class="fas fa-flag-checkered"></i>
+                                <strong>End Point:</strong> <?php echo htmlspecialchars($route['end_point']); ?>
+                            </p>
+                            <p>
+                                <i class="fas fa-map-pin"></i>
+                                <strong>Stops:</strong> <?php echo htmlspecialchars($route['stops']); ?>
+                            </p>
+                            <p>
+                                <i class="fas fa-clock"></i>
+                                <strong>Schedule:</strong> <?php echo htmlspecialchars($route['schedule']); ?>
+                            </p>
+                        </div>
+                        
+                        <?php if ($route['id'] == $user_route_id): ?>
+                            <div class="badge"><i class="fas fa-check"></i> Your Route</div>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="empty-state">
+                    <i class="fas fa-route"></i>
+                    <p>No bus routes available at the moment.</p>
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
     
     <footer>
@@ -465,7 +424,6 @@ $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="footer-links">
                 <a href="<?php echo BASE_URL; ?>index.php">Home</a>
                 <a href="<?php echo BASE_URL; ?>user/dashboard.php">Dashboard</a>
-                <a href="<?php echo BASE_URL; ?>user/bus-routes.php">Routes</a>
                 <a href="#">Contact</a>
                 <a href="#">Privacy Policy</a>
             </div>

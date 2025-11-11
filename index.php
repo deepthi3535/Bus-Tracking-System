@@ -1,73 +1,51 @@
 <?php
-// Start session at the very beginning
+require_once '../includes/paths.php';
+require_once '../includes/database.php';
+
+// Check if user is logged in
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
-// Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ' . BASE_URL . 'user/login.php');
     exit;
 }
 
-// Define constants if not already defined
-define('APP_NAME', 'College Bus Tracking System');
-define('BASE_URL', 'http://' . $_SERVER['HTTP_HOST'] . '/college-bus-tracking/');
+// Initialize database
+$database = new Database();
+$db = $database->getConnection();
 
-// Simulate database data for demonstration
-$user = [
-    'id' => $_SESSION['user_id'],
-    'name' => 'John Smith',
-    'student_id' => 'STU2024001',
-    'email' => 'john.smith@example.com',
-    'phone' => '+1 (555) 123-4567',
-    'route_id' => 2
-];
+// Get user details
+$user_id = $_SESSION['user_id'];
+$query = "SELECT * FROM users WHERE id = :user_id";
+$stmt = $db->prepare($query);
+$stmt->bindParam(':user_id', $user_id);
+$stmt->execute();
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$user_bus = [
-    'bus_number' => 'BUS-2024',
-    'route_name' => 'Campus West Route',
-    'driver_name' => 'Michael Johnson',
-    'status' => 'active'
-];
-
-$user_route = [
-    'name' => 'Campus West Route',
-    'start_point' => 'West Campus Terminal',
-    'end_point' => 'Main University Building',
-    'schedule' => '7:30 AM, 12:30 PM, 5:30 PM'
-];
-
-$notifications = [
-    [
-        'title' => 'Route Change Notice',
-        'message' => 'The West Campus route will have a temporary change next week due to construction.',
-        'created_at' => '2023-11-28 14:30:00'
-    ],
-    [
-        'title' => 'Holiday Schedule',
-        'message' => 'Bus services will operate on a reduced schedule during the holiday break.',
-        'created_at' => '2023-11-25 09:15:00'
-    ],
-    [
-        'title' => 'Weather Alert',
-        'message' => 'Due to expected severe weather, buses may experience delays tomorrow.',
-        'created_at' => '2023-11-20 16:45:00'
-    ]
-];
-
-// Handle logout if requested
-if (isset($_GET['action']) && $_GET['action'] === 'logout') {
-    // Unset all session variables
-    $_SESSION = array();
-    
-    // Destroy the session
-    session_destroy();
-    
-    // Redirect to login page
-    header('Location: login.php');
-    exit;
+// Get user's bus if assigned
+$user_bus = null;
+if ($user['route_id']) {
+    $query = "SELECT b.*, r.name as route_name 
+              FROM buses b 
+              LEFT JOIN routes r ON b.current_route_id = r.id 
+              WHERE b.current_route_id = :route_id AND b.status = 'active' 
+              LIMIT 1";
+    $stmt = $db->prepare($query);
+    $stmt->bindParam(':route_id', $user['route_id']);
+    $stmt->execute();
+    $user_bus = $stmt->fetch(PDO::FETCH_ASSOC);
 }
+
+// Get recent notifications
+$query = "SELECT * FROM notifications 
+          WHERE target_audience = 'all' OR (target_audience = 'specific_route' AND target_id = :route_id)
+          ORDER BY created_at DESC LIMIT 5";
+$stmt = $db->prepare($query);
+$stmt->bindParam(':route_id', $user['route_id']);
+$stmt->execute();
+$notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -576,11 +554,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
                     Your Route
                 </h3>
                 <div class="card-content">
-                    <?php if ($user_route): ?>
-                        <p><i class="fas fa-route"></i> <?php echo htmlspecialchars($user_route['name']); ?></p>
-                        <p><i class="fas fa-map-marker-alt"></i> Start: <?php echo htmlspecialchars($user_route['start_point']); ?></p>
-                        <p><i class="fas fa-flag-checkered"></i> End: <?php echo htmlspecialchars($user_route['end_point']); ?></p>
-                        <p><i class="fas fa-clock"></i> Schedule: <?php echo htmlspecialchars($user_route['schedule']); ?></p>
+                    <?php if ($user['route_id']): ?>
+                        <p><i class="fas fa-route"></i> Route #<?php echo $user['route_id']; ?></p>
+                        <p><i class="fas fa-map-marker-alt"></i> Pickup: Main Campus Gate</p>
+                        <p><i class="fas fa-clock"></i> Morning: 7:30 AM</p>
+                        <p><i class="fas fa-clock"></i> Evening: 4:30 PM</p>
                     <?php else: ?>
                         <div class="empty-state">
                             <i class="fas fa-exclamation-circle"></i>
